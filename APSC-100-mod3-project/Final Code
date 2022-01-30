@@ -1,0 +1,188 @@
+########---------- SET UP -----------######
+from qset_lib import Rover      # Imports the rover library
+
+rover = Rover()  # Creats rover object
+
+import math     # Imports math
+
+shift_l = 0     # Variable that scales the num_l values so they can be easily compared to num_r
+
+num_r = 0       # Variable that represent the index of the list of the first non inf value that the lasers dectect from the right side
+
+num_l = 0       # Variable that represent the index of the list of the first non inf value that the lasers dectect from the left side
+
+x_final = int(input("Enter the x value of the destination: "))  # Gives the x and y coordinates of the destination
+y_final = int(input("Enter the y value of the destination: "))
+
+destination = [x_final, y_final]  # Puts them into a list
+
+
+x_rover = rover.x  # Gets the initial x and y coordinates of the rover
+y_rover = rover.y
+
+rover_pos = [x_rover, y_rover]
+
+
+speed = 1  # angular speed of the rover
+
+arbitrary = [x_rover + 1, y_rover]  # acts as x-axis from rover origin
+
+turn_angle = 0.01  # Gives initial value to turn angle
+
+left = False        # defines left and right as false and true to start
+right = True
+
+phase = 1           # starts in phase = 1
+
+
+def Dot_product(rover_pos, destination, arbitrary):  # Calculates the angle between 2 vectors
+
+    vector_x = destination[0] - rover_pos[0]
+    vector_y = destination[1] - rover_pos[1]
+    vector_a = [vector_x, vector_y]
+    length_a = math.sqrt((vector_a[0]) ** 2 + (vector_a[1]) ** 2)
+
+    vector_x1 = arbitrary[0] - rover_pos[0]
+    vector_y1 = arbitrary[1] - rover_pos[1]
+    vector_b = [vector_x1, vector_y1]
+    length_b = math.sqrt((vector_b[0]) ** 2 + (vector_b[1]) ** 2)
+
+    dot_product = (vector_a[0] * vector_b[0]) + (vector_a[1] * vector_b[1])
+    angle = math.acos(dot_product / (length_a * length_b))
+
+    if destination[1] >= rover_pos[1]:      # Returns a positive angle if the y coordinate of the destination is greater or equal than the y coordiante of the rover position.
+        return angle
+    else:
+        return -angle
+
+
+def Rotate(angle, sign):  # Rotates the Rover
+    beta = abs(angle)
+    heading = rover.heading
+    if sign == "pos":
+        turn = speed
+    elif sign == "neg":
+        turn = -speed
+    while beta > 0.017:     # While the angle that the rover needs to turn is greater than 1 degrees it runs this loop
+        rover.send_command(0, turn)                             # Turn the rover
+        adjustment = abs(abs(heading) - abs(rover.heading))     # The difference between the new heading and the old heading
+        beta = beta - (adjustment * (math.pi / 180))            # Subtracts that difference from the original turn angle
+        heading = rover.heading                                 # Save the new heading
+
+run = True          # Run being true means its running through the rover code
+while run == True:
+
+    while phase == 1:  ########---------- PHASE 1: INITIAL START UP -----------######
+        for i in range(0,10000):        # Stops the rover
+            rover.send_command(0, 0)
+        if run == False:                # If run is false it breaks out of this loop
+            break
+            
+        while abs(turn_angle) > 0 and abs(turn_angle) < 0.017:  # It turns clockwise and counter clockwise untill it reaches the desired angle
+            x_rover = rover.x  # Gets the initial x and y coordinates of the rover
+            y_rover = rover.y
+            rover_pos = [x_rover, y_rover]
+            arbitrary = [x_rover + 1, y_rover]  # acts as x-axis from rover origin
+
+            alpha = Dot_product(rover_pos, destination, arbitrary)      # Gets the angle in between the destination vector and the x-axis
+            turn_angle = (rover.heading * (math.pi / 180)) - alpha      # Finds the angle that the rover needs to turn to align with goal
+            if turn_angle > 0:                  # Rotates counterclockwise if the turn angle is positive
+                Rotate(abs(turn_angle), "neg")
+            elif turn_angle < 0:                # Rotates cntrclockwise if the turn angle is negative
+                Rotate(abs(turn_angle), "pos")
+                
+        turn_angle = 0.01       # Resets the angle so that the code will come back in the loop when it re enters phase 1
+        phase = 2               # Enters phase 2
+
+    while phase == 2:  ########---------- PHASE 2: MOVING -----------######
+        if abs(abs(rover.x) - abs(x_final)) < 2 and abs(abs(rover.y) - abs(y_final)) < 2:       # if the rover is at the destination the code ends
+            run = False
+        if run == False: # If run is false it breaks out of this loop
+            break
+        lasers = list(rover.laser_distances)    # Creates a list of the sensor values
+        if lasers[7] < 5 or lasers[6] < 4 or lasers[8] < 4 or lasers[5] < 3 or lasers[9] < 3 or lasers[4] < 2 or lasers[10] < 2:  # if the lasers detect an obstacle we move onto phase 3
+            phase = 3
+        for i in range(0, 10000):
+            rover.send_command(1, 0)  # Move the rover forward
+
+
+    while phase == 3:  ########---------- PHASE 3: PICK DIRECTION -----------######
+        if run == False: # If run is false it breaks out of this loop
+            break
+        temp_dist = list(rover.laser_distances)  # Saves laser distances to a variable list
+
+        for i in range(0, 15):  # goes through the list looking for the the first non inf value
+            if temp_dist[i] < 15:
+                num_r = i
+                break
+
+        for i in range(14, 0, -1):  # does the same thing from the left side
+            if temp_dist[i] < 15:
+                num_l = i
+                shift_l = 14 - num_l        # Scales the values so they can be compared easily to num_r
+                break
+
+        if shift_l > num_r:  # if there is more "free" lasers on the left side move left
+            rover.send_command(0, 0)
+            turn = num_l - 6        # Calulates how much it needs to turn based on which laser detected the obstacle
+            gamma = turn * 6 * (math.pi / 180)      # Calculates the angle needed to turn
+            Rotate((gamma + (math.pi) / 4), "pos")      # Rotates the rover
+            direction = False                       # Gives the direction of turn, False means Left
+            phase = 4
+
+        else:
+            rover.send_command(0, 0)        # Same thing as above but for the right side
+            turn = -num_r + 8
+            gamma = turn * 6 * (math.pi / 180)
+            Rotate((gamma + (math.pi) / 4), "neg")
+            direction = True
+            phase = 4
+        while phase == 4:  ########---------- PHASE 4: OBSTACLE AVOIDANCE -----------######
+            if phase == 1: # If phase is 1 it breaks out of this loop
+                break
+            if run == False: # If run is false it breaks out of this loop
+                break
+            for i in range(0, 11000):       # Moves the rover
+                rover.send_command(100, 0)
+
+            index = list(rover.laser_distances)  # sensor values
+            if direction == True:                               # If the direction is right
+                while index[14] < 15 and index[11] < 15:        # Checks if the rover is clear from the obstacle using the far left sensors
+                    rover.send_command(300, 0)                  # Moves the rover
+                    index = list(rover.laser_distances)         # Gets sensor values
+                    if index[7] < 5 or index[6] < 4 or index[8] < 4 or index[5] < 3 or index[9] < 3 or index[4] < 2 or index[10] < 2:  # if the laser detects an obstacle we move onto phase 3
+                        rover.send_command(0,0)     # Stops the rover
+                        phase = 1                   # Goes back to phase 1
+                        break                       # Breaks out of the loop
+                for i in range(0, 10000):
+                    index = list(rover.laser_distances) # Gets sensor values
+                    if index[7] < 5 or index[6] < 4 or index[8] < 4 or index[5] < 3 or index[9] < 3 or index[4] < 2 or index[10] < 2: # if the laser detects an obstacle we move onto phase 3
+                        rover.send_command(0, 0) # Stops the rover
+                        phase = 1 # Goes to phase 1
+                        break       # Breaks the loop
+                for i in range(0,11000):        # Moves the rover
+                    rover.send_command(100,0)
+                phase = 1                       # Goes back to phase 1
+            elif direction == False:            # Same as above for left side
+                while index[0] < 15 and index[5] < 15:
+                    rover.send_command(300, 0)
+                    index = list(rover.laser_distances)
+                    if index[7] < 5 or index[6] < 4 or index[8] < 4 or index[5] < 3 or index[9] < 3 or index[4] < 2 or index[10] < 2:
+                        rover.send_command(0, 0)
+                        phase = 1
+                        break
+                for i in range(0, 10000):
+                    index = list(rover.laser_distances)
+                    if index[7] < 5 or index[6] < 4 or index[8] < 4 or index[5] < 3 or index[9] < 3 or index[4] < 2 or index[10] < 2: 
+                        rover.send_command(0, 0)
+                        phase = 1
+                        break
+                    rover.send_command(100, 0)
+                for i in range(0,11000):
+                    rover.send_command(100,0)
+                phase = 1
+
+print(rover.x, rover.y)
+print("Arrived")
+for i in range(0, 10000):       Stops the rover when it arrives at the destination
+    rover.send_command(0, 0)

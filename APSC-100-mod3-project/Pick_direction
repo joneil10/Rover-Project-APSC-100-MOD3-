@@ -1,0 +1,29 @@
+temp_dist = rover.laser_distance		# Saves laser distances to a variable list
+dist = rover.laser_distance[7]			# Gets the distance from the middle laser
+
+for i in range(0, 15):  # If laser hits object very far away or inf it replaces it with "inf"
+    if temp_dist[i] > (3 * dist) or type(temp_dist[i]) != int:
+        temp_dist[i] = "inf"
+
+for i in range(0, 15):  # goes through the list looking for the the first non inf value
+    if type(temp_dist[i]) == int:
+        num_r = i
+        break
+
+for i in range(14, 0, -1):  # does the same thing from the left side
+    if type(temp_dist[i]) == int:
+        num_l = i
+        shift_l = 14 - num_l
+        break
+
+if shift_l > num_r:  # if there is more "free" lasers on the left side move left
+    print("move left")
+    turn = num_l -6
+    gamma = turn * 6 * (math.pi / 180)
+    Rotate(gamma,pos)
+
+else:
+    print("move right")
+    turn = -num_r+8
+    gamma = turn * 6 * (math.pi / 180)
+    Rotate(gamma,neg)
